@@ -101,11 +101,11 @@ def center_samples(s):
 
 def voxelize(mesh, size=np.array([64., 64., 64.]), dims=np.array([2.5, 2.5, 2.5])):
 
-    xs = np.linspace(-dims[0]/2., dims[0]/2., size[0]+1)
-    ys = np.linspace(-dims[1]/2., dims[1]/2., size[1]+1)
-    zs = np.linspace(-dims[2]/2., dims[2]/2., size[2]+1)
+    xs = np.linspace(-dims[0]/2., dims[0]/2., int(size[0])+1)
+    ys = np.linspace(-dims[1]/2., dims[1]/2., int(size[1])+1)
+    zs = np.linspace(-dims[2]/2., dims[2]/2., int(size[2])+1)
 
-    samples = center_samples(np.array(mesh.get_samples(1e4)))
+    samples = center_samples(np.array(mesh.get_samples(10000)))
 
     voxels, _ = np.histogramdd(samples, bins=(xs, ys, zs))
     voxels = np.clip(voxels, 0, 1)
@@ -252,9 +252,10 @@ def write_conf_obj(path, points, conf):
       f.write("vc {}\n".format(c[0]))
 
 if __name__ == '__main__':
-    mesh_files = glob.glob("models/chairs/*.off")
+    mesh_files = glob.glob("ModelNet10/chair/test/*.off")
     total = len(mesh_files)
     count = 0
+    print("total:" + str(total))
     for mf in mesh_files:
         m = Mesh(mf)
         vs = voxelize(m)

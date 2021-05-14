@@ -1,4 +1,5 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
 import matplotlib.image as mpimg
 import numpy as np
 import scipy.misc
@@ -17,7 +18,8 @@ class BatchNormalization(object):
         self.train = train
         n_axes = len(x.get_shape()) - 1
         batch_mean, batch_var = tf.nn.moments(x, range(n_axes))
-        mean, variance = self.ema_mean_variance(batch_mean, batch_var)
+        with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):    #####
+            mean, variance = self.ema_mean_variance(batch_mean, batch_var)
         return tf.nn.batch_normalization(x, mean, variance, self.beta, self.gamma, self.epsilon)
 
     def ema_mean_variance(self, mean, variance):
@@ -60,7 +62,7 @@ def gather_nd(params, indices, name=None):
     rank = len(shape)
     flat_params = tf.reshape(params, [-1])
     multipliers = [reduce(lambda x, y: x*y, shape[i+1:], 1) for i in range(0, rank)]
-    indices_unpacked = tf.unpack(tf.transpose(indices, [rank - 1] + range(0, rank - 1), name))
+    indices_unpacked = tf.unstack(tf.transpose(indices, [rank - 1] + range(0, rank - 1), name))
     flat_indices = sum([a*b for a,b in zip(multipliers, indices_unpacked)])
     return tf.gather(flat_params, flat_indices, name=name)
 
@@ -71,7 +73,7 @@ def grid_coord(h, w, d):
     zl = tf.linspace(-1.0, 1.0, d)
 
     xs, ys, zs = tf.meshgrid(xl, yl, zl, indexing='ij')
-    g = tf.concat(0,[flatten(xs), flatten(ys), flatten(zs)])
+    g = tf.concat([flatten(xs), flatten(ys), flatten(zs)], 0)
     return g
 
 
@@ -82,7 +84,7 @@ def project(v, tau=1):
 
 
 def get_voxel_values(v, xs, ys, zs):
-    idxs = tf.cast(tf.pack([xs, ys, zs], axis=1), 'int32')
+    idxs = tf.cast(tf.stack([xs, ys, zs], axis=1), 'int32')
     idxs = tf.clip_by_value(idxs, 0, v.get_shape()[0])
     idxs = tf.expand_dims(idxs, 0)
     return gather_nd(v, idxs)
@@ -130,7 +132,7 @@ def transform_volume(v, t):
     ys = grid[1, :]
     zs = grid[2, :]
     
-    idxs_f = tf.transpose(tf.pack([xs, ys, zs]))
+    idxs_f = tf.transpose(tf.stack([xs, ys, zs]))
     idxs_f = tf.matmul(idxs_f, t)
     
     xs_t = (idxs_f[:, 0] + 1.0) * float(width) / 2.0

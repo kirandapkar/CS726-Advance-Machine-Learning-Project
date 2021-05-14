@@ -1,4 +1,6 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.compat.v1.disable_eager_execution()
+
 import numpy as np
 import ops
 import glob
@@ -7,7 +9,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='This program trains a PrGAN model.')
 parser.add_argument("-e", "--epochs", type=int, help="Number training epochs.", default=50)
-parser.add_argument("-ims", "--image_size", type=int, help="Image size (single dimension).", default=32)
+parser.add_argument("-ims", "--image_size", type=int, help="Image size (single dimension).", default=64)  #training 2d image are of 64 x 64 dimension. We are not downsampling here as mentioned in the paper
 parser.add_argument("-bs", "--batch_size", type=int, help="Minibatch size.", default=64)
 add_argument = parser.add_argument("-d", "--dataset", type=str,
                                    help="Dataset name. There must be a folder insde of the data folder with the same name.",
@@ -73,12 +75,12 @@ class PrGAN:
             self.D_real, self.D_real_logits, self.D_stats_real = self.discriminator(self.images, self.train_flag)
             self.D_fake, self.D_fake_logits, self.D_stats_fake = self.discriminator(self.G, self.train_flag, reuse=True)
 
-            self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.D_real_logits,
-                                                                                      tf.ones_like(self.D_real)))
-            self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.D_fake_logits,
-                                                                                      tf.zeros_like(self.D_fake)))
-            self.G_loss_classic = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.D_fake_logits,
-                                                                                 tf.ones_like(self.D_fake)))
+            self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_real_logits,
+                                                                                      labels=tf.ones_like(self.D_real)))
+            self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_fake_logits,
+                                                                                      labels=tf.zeros_like(self.D_fake)))
+            self.G_loss_classic = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_fake_logits,
+                                                                                 labels=tf.ones_like(self.D_fake)))
             dr_mean, dr_var = tf.nn.moments(self.D_stats_real, axes=[0])
             dl_mean, dl_var = tf.nn.moments(self.D_stats_fake, axes=[0])
             self.G_loss = ops.l2(dr_mean, dl_mean)
@@ -90,10 +92,13 @@ class PrGAN:
             allvars = tf.trainable_variables()
             self.D_vars = [v for v in allvars if 'd_' in v.name]
             self.G_vars = [v for v in allvars if 'g_' in v.name]
-
-            self.D_optim = tf.train.AdamOptimizer(1e-4, beta1=0.5).minimize(self.D_loss, var_list=self.D_vars)
-            self.G_optim = tf.train.AdamOptimizer(0.0025, beta1=0.5).minimize(self.G_loss, var_list=self.G_vars)
-            self.G_optim_classic = tf.train.AdamOptimizer(0.0025, beta1=0.5).minimize(self.G_loss_classic, var_list=self.G_vars)
+            
+            with tf.variable_scope(tf.get_variable_scope(),reuse=tf.AUTO_REUSE):
+                self.D_optim = tf.train.AdamOptimizer(1e-4, beta1=0.5).minimize(self.D_loss, var_list=self.D_vars)
+            with tf.variable_scope(tf.get_variable_scope(),reuse=tf.AUTO_REUSE):
+                self.G_optim = tf.train.AdamOptimizer(0.0025, beta1=0.5).minimize(self.G_loss, var_list=self.G_vars)
+            with tf.variable_scope(tf.get_variable_scope(),reuse=tf.AUTO_REUSE):
+                self.G_optim_classic = tf.train.AdamOptimizer(0.0025, beta1=0.5).minimize(self.G_loss_classic, var_list=self.G_vars)
 
             self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
 
@@ -199,8 +204,9 @@ class PrGAN:
     def discriminator(self, image, train, reuse=False):
         if reuse:
             tf.get_variable_scope().reuse_variables()
-
-        reshaped_img = tf.reshape(image, [self.batch_size, self.image_size[0], self.image_size[1], 1])
+        print image.shape
+        reshaped_img = tf.reshape(image, [self.batch_size, self.image_size[0], self.image_size[1], 1]) # kinda unsqueeze
+        print "once run"
         h0 = ops.conv2d(reshaped_img, self.d_size, name='d_h0_conv')
         h0 = ops.lrelu(self.d_bn0(h0, train))
         h1 = ops.conv2d(h0, self.d_size*2, name='d_h1_conv')
@@ -225,10 +231,18 @@ class PrGAN:
             h2 = ops.deconv3d(h1, [self.batch_size, 16, 16, 16, base_filters/4], name='g_h2')
             h2 = tf.nn.relu(self.g_bn2(h2, train))
             h3 = ops.deconv3d(h2, [self.batch_size, 32, 32, 32, 1], name='g_h3')
+            
+            ######### Changing ###############
             h3 = tf.nn.relu(self.g_bn3(h3, train))
             h4 = ops.deconv3d(h3, [self.batch_size, 64, 64, 64, 1], name='g_h4')
             h4 = tf.nn.sigmoid(h4) * (1.0/self.tau)
-            self.voxels = tf.reshape(h4, [self.batch_size, 64, 64, 64])
+            self.voxels = tf.reshape(h4, [self.batch_size, 64, 64, 64]) 
+            
+            # h3 = tf.nn.relu(self.g_bn3(h3, train))
+            # h4 = ops.deconv3d(h3, [self.batch_size, 64, 64, 64, 1], name='g_h4')
+            # h4 = tf.nn.sigmoid(h3) * (1.0/self.tau)
+            # self.voxels = tf.reshape(h4, [self.batch_size, 32, 32, 32]) 
+            
             v = z_enc[:, self.z_size-1]
 
             rendered_imgs = []
@@ -237,7 +251,8 @@ class PrGAN:
                         self.tau)
                 rendered_imgs.append(img)
 
-            self.final_imgs = tf.reshape(tf.pack(rendered_imgs), [self.batch_size, 64, 64, 1])
+            self.final_imgs = tf.reshape(tf.stack(rendered_imgs), [self.batch_size, 64, 64, 1])
+            # self.final_imgs = tf.reshape(tf.stack(rendered_imgs), [self.batch_size, 32, 32, 1])
         return self.final_imgs
 
     def sample (self, n_batches):
@@ -292,3 +307,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    print tf.__version__

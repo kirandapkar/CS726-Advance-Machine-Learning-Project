@@ -22,7 +22,6 @@ def rot(t, p=0.0):
 
     return ry
 
-
 def grid_coord(h, w, d):
     xl = np.linspace(-1.0, 1.0, w)
     yl = np.linspace(-1.0, 1.0, h)
@@ -64,11 +63,12 @@ def project(v, tau=1):
 
 if __name__ == '__main__':
     voxels_path = glob.glob(sys.argv[1])
-    print "Creates dataset from volume files. Example: python create_dataset.py \"chair_volumes/*\""
-    print "Creating dataset from ", sys.argv[1]
+    print("Creates dataset from volume files. Example: python create_dataset.py \"chair_volumes/*\"")
+    print("Creating dataset from ", sys.argv[1])
 
     count = 0
     total = len(voxels_path)
+    print(total,voxels_path)
     for p in voxels_path:
         vs = np.load(p)
         path = p.split('.')[0]
@@ -81,4 +81,4 @@ if __name__ == '__main__':
             i+=1
         progress(count, total)
         count += 1
-    print "Done."
+    print("Done.")
